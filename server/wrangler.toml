@@ -1,0 +1,16 @@
+name = "ai-support"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+# 프롬프트 기록 보관함 (무료 플랜은 SQLite 저장소를 쓰는 Durable Object만 가능)
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]

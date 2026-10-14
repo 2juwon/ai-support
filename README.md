@@ -16,3 +16,19 @@
 - 'AI로 다듬기' 버튼은 claude.ai 아티팩트 안에서만 동작합니다. 이 GitHub Pages 버전에서는 꺼지고 '틀에 맞춰 바로 만들기'만 쓸 수 있습니다.
 - 저장한 프롬프트와 작성 중인 내용은 각자 브라우저(localStorage)에만 남고, 서버로 보내지 않습니다.
 - HTML 파일 한 개로 되어 있어 따로 빌드가 필요 없습니다.
+
+## 익명 통계 (GitHub Pages 버전)
+프롬프트를 만들면 입력 내용 일부가 익명으로 서버에 모여 "사람들이 AI에게 맡기는 업무" 통계에 쓰입니다. 화면의 **익명 통계에 보태기** 체크를 끄면 아무것도 보내지 않습니다.
+
+- 보내는 것: 업무 이름, 작업 순서(또는 업무 설명), 받고 싶은 결과, 역할, 말투, 지킬 것, 틀/AI 중 어떤 방법으로 만들었는지, 복사·저장을 눌렀는지, 브라우저마다 만든 무작위 익명 번호
+- 보내지 않는 것: 'AI에게 줄 자료' 칸, 이름·로그인 정보. 이메일·전화번호·주민번호·9자리 이상 번호는 브라우저와 서버에서 두 번 가립니다. IP는 요청 제한에만 쓰고 그대로 저장하지 않습니다(해시)
+- 예시를 그대로 누른 기록은 통계에서 빠지고, 같은 사람이 같은 내용을 30분 안에 다시 만들면 한 건으로 합칩니다
+- claude.ai 아티팩트 안에서는 외부 서버 접속이 막혀 있어 수집하지 않습니다
+
+### 서버 (`server/`)
+Cloudflare Workers + Durable Object(SQLite, 무료 플랜). 주소 `https://ai-support.2juwon.workers.dev`
+
+- `POST /api/log` 기록 남기기, `POST /api/log/:id/copy|save` 복사·저장 표시
+- 관리 페이지 `/admin` (비밀번호 `ADMIN_KEY`): 요약 숫자, 날짜별 기록, 자주 나오는 낱말, 결과·역할·말투 순위, 기록 찾기·지우기, 엑셀용 CSV 받기
+- `main`에 `server/`가 바뀌면 GitHub Actions '서버 배포'가 자동으로 올립니다. 저장소 Secrets에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ADMIN_KEY`가 필요합니다
+- 시험: `cd server && npx wrangler dev --var ADMIN_KEY:test-key-123` 를 켜 두고 `node test/api.test.mjs`

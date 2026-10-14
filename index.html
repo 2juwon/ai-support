@@ -73,6 +73,9 @@ ol.steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;a
 .lib-item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lib-item small{color:var(--muted);font-variant-numeric:tabular-nums}
 .hint{border-left:3px solid var(--step);padding:2px 0 2px 10px}
+.share{display:flex;gap:10px;align-items:flex-start;background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:.84rem;color:var(--muted)}
+.share input{margin:3px 0 0;width:18px;height:18px;flex:none;accent-color:var(--accent)}
+.share b{color:var(--fg);font-weight:600}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -146,6 +149,10 @@ ol.steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;a
         <button class="btn" id="stop" hidden>멈추기</button>
       </div>
       <p class="note" id="ai-note">'AI로 다듬기'는 이 페이지에서 Claude를 불러 쓰는 방식이라 따로 API 연동이 필요 없어요. 처음 누를 때 허용 여부를 한 번 물어요.</p>
+      <label class="share" id="share-box" hidden>
+        <input type="checkbox" id="share" checked>
+        <span><b>익명 통계에 보태기</b><br>업무 이름·작업 순서·받고 싶은 결과·역할·말투·지킬 것만 이름 없이 모아 '사람들이 AI에게 맡기는 업무' 통계에 써요. 'AI에게 줄 자료' 칸은 보내지 않고, 이메일·전화번호처럼 보이는 글자는 가려서 보내요. 회사 비밀이 들어 있으면 체크를 꺼 주세요.</span>
+      </label>
     </section>
 
     <!-- 결과판 -->
@@ -277,7 +284,7 @@ function hasContent(d){ return (d.mode==="steps"? d.steps.length>0 : !!d.free); 
 const out=$("#out"), status=$("#status");
 function showOut(text, kind){
   out.textContent=text; out.classList.toggle("empty", !text);
-  lastKind=kind;
+  lastKind=kind; logId=null;
   const b=$("#out-kind"); b.hidden=!kind; b.textContent = kind==="ai" ? "AI가 다듬음" : kind==="tpl" ? "틀로 만듦" : "";
   $("#copy").disabled = !text; $("#save").disabled = !text;
 }
@@ -298,17 +305,16 @@ function buildTemplate(d){
 $("#go-tpl").onclick=()=>{
   const d=readForm();
   if(!hasContent(d)){ setStatus("작업 순서나 업무 설명을 한 줄 이상 적어 주세요.","err"); return; }
-  showOut(buildTemplate(d),"tpl"); setStatus("틀에 맞춰 만들었어요. 더 매끄럽게 하려면 'AI로 다듬기'를 눌러 보세요.","ok");
+  showOut(buildTemplate(d),"tpl"); logMake("tpl"); setStatus("틀에 맞춰 만들었어요. 더 매끄럽게 하려면 'AI로 다듬기'를 눌러 보세요.","ok");
 };
 
 // ---------- AI로 다듬기 ----------
-let sample=null, ctl=null;
+let sample=null, ctl=null, aiOff=false;
 const aiBtn=$("#go-ai");
 (async()=>{
   try{ sample = window.claude?.use ? await window.claude.use("sample") : null; }catch(e){ sample=null; }
   if(!sample) disableAI("이 화면에서는 AI 다듬기를 쓸 수 없어요. '틀에 맞춰 바로 만들기'는 그대로 쓸 수 있어요.");
 })();
-let aiOff=false;
 function disableAI(msg){ aiOff=true; aiBtn.disabled=true; $("#ai-note").textContent=msg; }
 
 const META = `당신은 회사 업무용 프롬프트를 설계하는 전문가입니다.
@@ -349,6 +355,7 @@ aiBtn.onclick=async()=>{
       onText:({text})=>{ out.classList.remove("empty"); out.textContent=text; }
     });
     showOut(text.trim(),"ai");
+    if(!truncated) logMake("ai");
     setStatus(truncated?"길어서 중간에 잘렸어요. 단계를 나눠서 다시 해 보세요.":"다 됐어요. 복사해서 바로 써 보세요.", truncated?"err":"ok");
   }catch(e){
     if(e.text) showOut(e.text,"ai"); else showOut("","");
@@ -367,7 +374,7 @@ $("#stop").onclick=()=>ctl?.abort();
 
 // ---------- 복사 ----------
 $("#copy").onclick=async()=>{
-  try{ await navigator.clipboard.writeText(out.textContent); setStatus("복사했어요.","ok"); }
+  try{ await navigator.clipboard.writeText(out.textContent); setStatus("복사했어요.","ok"); logMark("copy"); }
   catch(e){ const r=document.createRange(); r.selectNodeContents(out); const s=getSelection(); s.removeAllRanges(); s.addRange(r); setStatus("자동 복사가 막혀 있어요. 선택된 글을 길게 눌러 복사해 주세요.","err"); }
 };
 
@@ -391,8 +398,49 @@ function renderLib(){
 $("#save").onclick=()=>{
   const d=readForm(); const l=getLib(); const now=new Date();
   l.unshift({title:d.name||"이름 없는 업무", date:`${now.getMonth()+1}/${now.getDate()}`, prompt:out.textContent, kind:lastKind, form:{...d,steps:d.steps}});
-  setLib(l.slice(0,30)); renderLib(); setStatus("내 목록에 저장했어요.","ok");
+  setLib(l.slice(0,30)); renderLib(); setStatus("내 목록에 저장했어요.","ok"); logMark("save");
 };
+
+// ---------- 익명 통계 (GitHub Pages 버전에서만) ----------
+const SERVER="https://ai-support.2juwon.workers.dev";
+const inArtifact=!!window.claude;            // claude.ai 안에서는 외부 서버 접속이 막혀 있어 끔
+let logId=null;
+function getShare(){ try{return localStorage.getItem("ps-share")!=="off"}catch(e){return true} }
+function anonId(){
+  try{ let v=localStorage.getItem("ps-sid"); if(!v){ v=crypto.randomUUID().replace(/-/g,""); localStorage.setItem("ps-sid",v); } return v; }catch(e){ return ""; }
+}
+// 서버(server/src/mask.js)와 같은 규칙 — 둘을 같이 고칠 것
+function mask(s){
+  return String(s??"")
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g,"[이메일]")
+    .replace(/\d{6}\s*-\s*[1-8]\d{6}/g,"[주민번호]")
+    .replace(/(\+?82[\s-]?)?0\d{1,2}[\s.-]?\d{3,4}[\s.-]?\d{4}/g,"[전화번호]")
+    .replace(/\d[\d\s-]{8,}\d/g,m=>m.replace(/\D/g,"").length>=9?"[번호]":m);
+}
+function isExample(d){
+  return Object.values(EXAMPLES).some(e=>e.name===d.name && (e.steps||[]).join("|")===d.steps.join("|") && (e.free||"")===d.free && e.output===d.output);
+}
+const canLog=()=>!inArtifact && getShare() && navigator.onLine!==false;
+function post(path, body){
+  return fetch(SERVER+path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),keepalive:true})
+    .then(r=>r.ok?r.json():null).catch(()=>null);
+}
+async function logMake(kind){
+  logId=null;
+  if(!canLog()) return;
+  const d=readForm();
+  const form={mode:d.mode,name:mask(d.name),steps:d.mode==="steps"?d.steps.map(mask):[],free:d.mode==="free"?mask(d.free):"",
+    output:mask(d.output),role:mask(d.role),tone:d.tone,rules:mask(d.rules)};
+  const r=await post("/api/log",{sid:anonId(),kind,example:isExample(d),promptLen:out.textContent.length,form});
+  if(r&&r.id) logId=r.id;
+}
+function logMark(what){ if(logId && canLog()) post("/api/log/"+logId+"/"+what,{sid:anonId()}); }
+(function initShare(){
+  if(inArtifact) return;
+  const box=$("#share-box"), cb=$("#share");
+  box.hidden=false; cb.checked=getShare();
+  cb.onchange=()=>{ try{localStorage.setItem("ps-share",cb.checked?"on":"off")}catch(e){} setStatus(cb.checked?"익명 통계에 보태 주셔서 고마워요.":"이제부터는 아무것도 보내지 않아요.", "ok"); };
+})();
 
 // ---------- 시작 ----------
 (function init(){
