@@ -1,0 +1,406 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="description" content="평소 하는 일을 순서대로 적으면 다른 AI에 붙여 넣어 쓸 수 있는 업무 프롬프트로 만들어 드려요."><meta property="og:title" content="업무 프롬프트 공방"><meta property="og:description" content="워크플로우를 적으면 AI에 바로 쓰는 업무 프롬프트로."><meta property="og:type" content="website"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>업무 프롬프트 공방</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 왼쪽 작업대(워크플로우 입력) → 오른쪽 결과판(완성 프롬프트). 폰에서는 위아래로 쌓임 */
+:root{
+  --bg:#f3f4f7; --surface:#ffffff; --sunk:#e9ebf1; --line:#d5d9e3;
+  --fg:#1b2130; --muted:#5d6577; --accent:#2b59c3; --accent-ink:#ffffff;
+  --accent-soft:#e3eafb; --step:#c7861a; --ok:#1d7a4d; --warn:#b4471f;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12151d; --surface:#1a1f2a; --sunk:#232937; --line:#323a4b;
+  --fg:#e7eaf2; --muted:#9aa3b6; --accent:#7b9ff0; --accent-ink:#0f1422;
+  --accent-soft:#25304a; --step:#e3a84a; --ok:#5cc28f; --warn:#f0875e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151d; --surface:#1a1f2a; --sunk:#232937; --line:#323a4b;
+  --fg:#e7eaf2; --muted:#9aa3b6; --accent:#7b9ff0; --accent-ink:#0f1422;
+  --accent-soft:#25304a; --step:#e3a84a; --ok:#5cc28f; --warn:#f0875e; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header h1{font-size:1.6rem;margin:0;letter-spacing:-.02em;text-wrap:balance}
+header p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel h2{font-size:1rem;margin:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.label{font-size:.78rem;font-weight:600;color:var(--muted);letter-spacing:.04em;display:block;margin-bottom:6px}
+.field{display:flex;flex-direction:column}
+input[type=text],textarea,select{width:100%;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+textarea{resize:vertical;min-height:64px}
+input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.row2{grid-template-columns:1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:.82rem;border:1px solid var(--line);background:var(--sunk);color:var(--fg);border-radius:999px;padding:4px 11px;cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.tabs{display:flex;background:var(--sunk);border-radius:8px;padding:3px;gap:3px}
+.tabs button{flex:1;font:inherit;font-size:.86rem;border:0;background:transparent;color:var(--muted);padding:6px 8px;border-radius:6px;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--surface);color:var(--fg);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+ol.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+ol.steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:start}
+.num{font-family:var(--mono);font-weight:500;color:var(--step);font-size:.9rem;padding-top:9px;text-align:right;font-variant-numeric:tabular-nums}
+.stepbtns{display:flex;gap:2px;padding-top:4px}
+.icon{font:inherit;border:0;background:transparent;color:var(--muted);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:.95rem}
+.icon:hover{background:var(--sunk);color:var(--fg)}
+.icon:disabled{opacity:.3;cursor:default;background:transparent}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.small{padding:6px 11px;font-size:.84rem;font-weight:500}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.add{align-self:flex-start}
+.out{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+@media (max-width:860px){.out{position:static}}
+.prompt{font-family:var(--mono);font-size:.86rem;line-height:1.65;background:var(--sunk);border-radius:8px;padding:14px;white-space:pre-wrap;word-break:break-word;min-height:220px;max-height:62vh;overflow:auto;margin:0}
+.prompt.empty{color:var(--muted);font-family:var(--sans)}
+.status{font-size:.84rem;color:var(--muted);min-height:1.3em}
+.status.err{color:var(--warn)}
+.status.ok{color:var(--ok)}
+.badge{font-size:.72rem;font-weight:600;letter-spacing:.04em;border-radius:999px;padding:2px 9px;background:var(--accent-soft);color:var(--accent)}
+.note{font-size:.84rem;color:var(--muted);margin:0}
+.lib{display:flex;flex-direction:column;gap:6px}
+.lib-item{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.lib-item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib-item small{color:var(--muted);font-variant-numeric:tabular-nums}
+.hint{border-left:3px solid var(--step);padding:2px 0 2px 10px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>업무 프롬프트 공방</h1>
+    <p>평소 하는 일을 순서대로 적으면, 다른 AI에 그대로 붙여 넣어 쓸 수 있는 프롬프트로 다듬어 드려요.</p>
+  </header>
+
+  <div class="grid">
+    <!-- 작업대 -->
+    <section class="panel" aria-labelledby="h-in">
+      <h2 id="h-in">워크플로우 적기 <span class="chips" id="examples"></span></h2>
+
+      <div class="tabs" role="tablist">
+        <button id="tab-steps" role="tab" aria-selected="true">단계별로</button>
+        <button id="tab-free" role="tab" aria-selected="false">자유롭게</button>
+      </div>
+
+      <div class="field">
+        <label class="label" for="f-name">업무 이름</label>
+        <input type="text" id="f-name" placeholder="예: 주간 영업 보고서 정리">
+      </div>
+
+      <div id="mode-steps" class="field" style="gap:10px">
+        <span class="label">작업 순서</span>
+        <ol class="steps" id="steps"></ol>
+        <button class="btn small add" id="add-step">+ 단계 추가</button>
+      </div>
+
+      <div id="mode-free" class="field" hidden>
+        <label class="label" for="f-free">하는 일을 편하게 적어 주세요</label>
+        <textarea id="f-free" rows="7" placeholder="예: 매주 월요일에 지난주 견적 건수를 딜러별로 모아서 표로 만들고, 전주 대비 늘거나 준 곳을 찾아 팀장님께 짧게 보고해요."></textarea>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label class="label" for="f-input">AI에게 줄 자료</label>
+          <textarea id="f-input" rows="2" placeholder="예: 엑셀에서 복사한 견적 목록"></textarea>
+        </div>
+        <div class="field">
+          <label class="label" for="f-output">받고 싶은 결과</label>
+          <textarea id="f-output" rows="2" placeholder="예: 표 1개 + 3줄 요약"></textarea>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label class="label" for="f-role">AI가 맡을 역할 (선택)</label>
+          <input type="text" id="f-role" placeholder="예: 꼼꼼한 영업 분석 담당자">
+        </div>
+        <div class="field">
+          <label class="label" for="f-tone">말투</label>
+          <select id="f-tone">
+            <option>정중한 업무체</option>
+            <option>간결한 보고체 (~함, ~임)</option>
+            <option>친근한 대화체</option>
+            <option>고객 응대용 존댓말</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label" for="f-rules">꼭 지킬 것 / 하면 안 되는 것</label>
+        <textarea id="f-rules" rows="2" placeholder="예: 숫자는 자료에 있는 것만 쓰기, 개인 연락처는 지우기"></textarea>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="go-ai">AI로 다듬기</button>
+        <button class="btn" id="go-tpl">틀에 맞춰 바로 만들기</button>
+        <button class="btn" id="stop" hidden>멈추기</button>
+      </div>
+      <p class="note" id="ai-note">'AI로 다듬기'는 이 페이지에서 Claude를 불러 쓰는 방식이라 따로 API 연동이 필요 없어요. 처음 누를 때 허용 여부를 한 번 물어요.</p>
+    </section>
+
+    <!-- 결과판 -->
+    <section class="panel out" aria-labelledby="h-out">
+      <h2 id="h-out">완성된 프롬프트 <span class="badge" id="out-kind" hidden></span></h2>
+      <pre class="prompt empty" id="out" tabindex="0">왼쪽에 업무를 적고 버튼을 누르면 여기에 프롬프트가 나와요.
+위의 예시 하나를 눌러 보면 어떻게 나오는지 바로 볼 수 있어요.</pre>
+      <div class="status" id="status" role="status"></div>
+      <div class="actions">
+        <button class="btn primary small" id="copy" disabled>복사하기</button>
+        <button class="btn small" id="save" disabled>내 목록에 저장</button>
+      </div>
+      <p class="note hint" id="tip">팁: 완성된 프롬프트의 <b>[[ ]]</b> 자리는 실제로 쓸 때 자료를 넣는 곳이에요.</p>
+
+      <div class="field" style="gap:8px">
+        <span class="label">내가 저장한 프롬프트 <small style="font-weight:400">(이 브라우저에만 저장)</small></span>
+        <div class="lib" id="lib"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const EXAMPLES = {
+  "주간 보고": {
+    name:"주간 견적 현황 보고",
+    steps:["지난주 견적 목록을 딜러별로 묶는다","딜러별 견적 건수와 금융사별 비중을 표로 만든다","전주와 비교해 20% 이상 늘거나 준 딜러를 찾는다","눈에 띄는 변화의 이유를 자료 안에서 추정한다","팀장님 보고용 3줄 요약을 쓴다"],
+    free:"", input:"엑셀에서 복사한 지난주·전주 견적 목록", output:"딜러별 표 1개 + 변화 큰 딜러 목록 + 3줄 요약",
+    role:"꼼꼼한 영업 데이터 분석 담당자", tone:"간결한 보고체 (~함, ~임)", rules:"자료에 없는 숫자는 만들지 않기, 추정은 '추정'이라고 표시"
+  },
+  "고객 문의 답변": {
+    name:"고객 문의 메일 답변 초안",
+    steps:["문의 메일에서 고객이 묻는 것을 모두 뽑는다","각 질문이 FAQ 자료로 답할 수 있는지 확인한다","답할 수 있는 건 쉽게 풀어 답하고, 아닌 건 담당자 확인 필요로 표시한다","인사와 마무리 문장을 붙여 메일 초안을 만든다"],
+    free:"", input:"고객 문의 메일 원문, 우리 FAQ 문서", output:"바로 보낼 수 있는 메일 초안 + 담당자 확인이 필요한 항목 목록",
+    role:"친절한 고객지원 담당자", tone:"고객 응대용 존댓말", rules:"금리·한도는 확정된 것처럼 말하지 않기, 개인정보 다시 적지 않기"
+  },
+  "회의록": {
+    name:"회의 메모를 회의록으로",
+    steps:[], free:"회의 중에 막 적은 메모를 붙여 넣으면, 결정된 것·할 일(담당자, 기한)·다음에 다시 얘기할 것으로 나눠서 정리해 줬으면 해요. 할 일은 표로.",
+    input:"회의 중 적은 메모", output:"결정 사항 / 할 일 표 / 다음 논의 거리",
+    role:"", tone:"간결한 보고체 (~함, ~임)", rules:"메모에 없는 담당자나 기한은 '미정'으로"
+  }
+};
+
+let mode = "steps";
+let steps = [""];
+let lastKind = "";
+
+// ---------- 예시 칩 ----------
+const exBox = $("#examples");
+const exLabel = document.createElement("span");
+exLabel.className="label"; exLabel.style.margin="0 2px 0 0"; exLabel.textContent="예시";
+exBox.append(exLabel);
+for (const k of Object.keys(EXAMPLES)) {
+  const b = document.createElement("button");
+  b.className="chip"; b.textContent=k;
+  b.onclick=()=>loadForm(EXAMPLES[k]);
+  exBox.append(b);
+}
+
+// ---------- 탭 ----------
+function setMode(m){
+  mode=m;
+  $("#tab-steps").setAttribute("aria-selected", m==="steps");
+  $("#tab-free").setAttribute("aria-selected", m==="free");
+  $("#mode-steps").hidden = m!=="steps";
+  $("#mode-free").hidden = m!=="free";
+  saveDraft();
+}
+$("#tab-steps").onclick=()=>setMode("steps");
+$("#tab-free").onclick=()=>setMode("free");
+
+// ---------- 단계 목록 ----------
+function renderSteps(){
+  const ol=$("#steps"); ol.innerHTML="";
+  steps.forEach((s,i)=>{
+    const li=document.createElement("li");
+    const n=document.createElement("span"); n.className="num"; n.textContent=String(i+1).padStart(2,"0");
+    const ta=document.createElement("textarea"); ta.rows=1; ta.value=s; ta.id="step-"+i;
+    ta.placeholder = i===0 ? "예: 받은 자료에서 필요한 항목만 골라낸다" : "다음에 할 일";
+    ta.setAttribute("aria-label",(i+1)+"번째 단계");
+    ta.style.minHeight="40px";
+    ta.oninput=()=>{steps[i]=ta.value;saveDraft()};
+    ta.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();steps.splice(i+1,0,"");renderSteps();$("#step-"+(i+1)).focus()} };
+    const bx=document.createElement("div"); bx.className="stepbtns";
+    const mk=(t,lab,dis,fn)=>{const b=document.createElement("button");b.className="icon";b.textContent=t;b.title=lab;b.setAttribute("aria-label",lab);b.disabled=dis;b.onclick=fn;return b};
+    bx.append(
+      mk("↑","위로",i===0,()=>{[steps[i-1],steps[i]]=[steps[i],steps[i-1]];renderSteps();saveDraft()}),
+      mk("↓","아래로",i===steps.length-1,()=>{[steps[i+1],steps[i]]=[steps[i],steps[i+1]];renderSteps();saveDraft()}),
+      mk("×","지우기",steps.length===1,()=>{steps.splice(i,1);renderSteps();saveDraft()})
+    );
+    li.append(n,ta,bx); ol.append(li);
+  });
+}
+$("#add-step").onclick=()=>{steps.push("");renderSteps();$("#step-"+(steps.length-1)).focus();saveDraft()};
+
+// ---------- 폼 읽기/쓰기 ----------
+const F = ["name","free","input","output","role","tone","rules"];
+function readForm(){
+  const o={}; F.forEach(k=>o[k]=$("#f-"+k).value.trim());
+  o.steps=steps.map(s=>s.trim()).filter(Boolean); o.mode=mode; return o;
+}
+function loadForm(d){
+  F.forEach(k=>{ if(d[k]!==undefined) $("#f-"+k).value=d[k]; });
+  steps = d.steps && d.steps.length ? [...d.steps] : [""];
+  renderSteps();
+  setMode(d.mode || (d.steps && d.steps.length ? "steps" : "free"));
+}
+function saveDraft(){ try{localStorage.setItem("ps-draft",JSON.stringify({...readForm(),steps}))}catch(e){} }
+F.forEach(k=>$("#f-"+k).addEventListener("input",saveDraft));
+$("#f-tone").addEventListener("change",saveDraft);
+
+function workflowText(d){
+  const parts=[];
+  if(d.name) parts.push("업무 이름: "+d.name);
+  if(d.mode==="steps" && d.steps.length) parts.push("작업 순서:\n"+d.steps.map((s,i)=>`${i+1}. ${s}`).join("\n"));
+  if(d.mode==="free" && d.free) parts.push("업무 설명:\n"+d.free);
+  if(d.input) parts.push("AI에게 줄 자료: "+d.input);
+  if(d.output) parts.push("받고 싶은 결과: "+d.output);
+  if(d.role) parts.push("AI가 맡을 역할: "+d.role);
+  if(d.tone) parts.push("말투: "+d.tone);
+  if(d.rules) parts.push("지킬 것/하면 안 되는 것: "+d.rules);
+  return parts.join("\n\n");
+}
+function hasContent(d){ return (d.mode==="steps"? d.steps.length>0 : !!d.free); }
+
+// ---------- 출력 ----------
+const out=$("#out"), status=$("#status");
+function showOut(text, kind){
+  out.textContent=text; out.classList.toggle("empty", !text);
+  lastKind=kind;
+  const b=$("#out-kind"); b.hidden=!kind; b.textContent = kind==="ai" ? "AI가 다듬음" : kind==="tpl" ? "틀로 만듦" : "";
+  $("#copy").disabled = !text; $("#save").disabled = !text;
+}
+function setStatus(msg, cls){ status.textContent=msg||""; status.className="status"+(cls?" "+cls:""); }
+
+// ---------- 틀로 만들기 (AI 없이) ----------
+function buildTemplate(d){
+  const L=[];
+  L.push(`# 역할\n당신은 ${d.role || "이 업무를 잘 아는 실무 담당자"}입니다.`);
+  L.push(`# 목표\n${d.name ? `"${d.name}" 업무를 처리해 주세요.` : "아래 업무를 처리해 주세요."}${d.output?`\n최종 결과물: ${d.output}`:""}`);
+  if(d.mode==="steps" && d.steps.length) L.push("# 작업 순서\n아래 순서를 지켜서 진행하세요.\n"+d.steps.map((s,i)=>`${i+1}. ${s}`).join("\n"));
+  if(d.mode==="free" && d.free) L.push("# 업무 설명\n"+d.free);
+  L.push(`# 출력 형식\n- ${d.output || "핵심만 정리한 결과"}\n- 말투: ${d.tone}`);
+  L.push(`# 지킬 것\n${d.rules? d.rules.split(/[,\n]/).map(s=>s.trim()).filter(Boolean).map(s=>"- "+s).join("\n")+"\n":""}- 자료에 없는 내용은 지어내지 말고, 모르는 부분은 "확인 필요"라고 적으세요.`);
+  L.push(`# 자료\n${d.input?`(${d.input})\n`:""}[[여기에 자료를 붙여 넣으세요]]`);
+  return L.join("\n\n");
+}
+$("#go-tpl").onclick=()=>{
+  const d=readForm();
+  if(!hasContent(d)){ setStatus("작업 순서나 업무 설명을 한 줄 이상 적어 주세요.","err"); return; }
+  showOut(buildTemplate(d),"tpl"); setStatus("틀에 맞춰 만들었어요. 더 매끄럽게 하려면 'AI로 다듬기'를 눌러 보세요.","ok");
+};
+
+// ---------- AI로 다듬기 ----------
+let sample=null, ctl=null;
+const aiBtn=$("#go-ai");
+(async()=>{
+  try{ sample = window.claude?.use ? await window.claude.use("sample") : null; }catch(e){ sample=null; }
+  if(!sample) disableAI("이 화면에서는 AI 다듬기를 쓸 수 없어요. '틀에 맞춰 바로 만들기'는 그대로 쓸 수 있어요.");
+})();
+let aiOff=false;
+function disableAI(msg){ aiOff=true; aiBtn.disabled=true; $("#ai-note").textContent=msg; }
+
+const META = `당신은 회사 업무용 프롬프트를 설계하는 전문가입니다.
+아래는 한 직원이 자기 업무 흐름을 적은 메모입니다. 이것을 다른 AI(ChatGPT, Claude 등)에 그대로 붙여 넣어 쓸 수 있는 "완성된 업무 프롬프트"로 바꿔 주세요.
+
+규칙:
+- 한국어로 씁니다.
+- 아래 순서의 마크다운 제목을 씁니다: # 역할 / # 목표 / # 작업 순서 / # 출력 형식 / # 지킬 것 / # 자료
+- 메모의 단계를 빠뜨리지 말고, 모호한 단계는 AI가 실행할 수 있게 구체적인 동사로 풀어 씁니다. 메모에 없는 업무를 새로 추가하지 않습니다.
+- 출력 형식은 예시 틀(표 머리글, 요약 줄 수 등)까지 보여 줍니다.
+- "자료에 없는 내용은 지어내지 말 것", "모르면 확인 필요라고 쓸 것"을 지킬 것에 포함합니다.
+- 실제로 쓸 때 사람이 채울 자리는 [[설명]] 모양으로 표시합니다. # 자료 아래에는 [[...]] 자리만 둡니다.
+- 프롬프트 본문만 출력합니다. 앞뒤 설명, 인사, 코드 블록 표시는 쓰지 않습니다.
+
+직원의 메모:
+"""
+`;
+const ERR = {
+  not_granted:"AI 사용을 허용하지 않아서 다듬지 못했어요. 새로고침하면 다시 물어봐요.",
+  sampling_disabled:"이 계정에서는 AI 다듬기를 쓸 수 없어요.",
+  rate_limited:"요청이 너무 많아요. 잠시 뒤에 다시 눌러 주세요.",
+  session_expired:"로그인이 풀렸어요. 다시 로그인한 뒤 눌러 주세요.",
+  refused:"이 내용으로는 프롬프트를 만들 수 없다고 해요. 내용을 조금 바꿔 보세요.",
+  prompt_too_large:"내용이 너무 길어요. 조금 줄여서 다시 눌러 주세요.",
+  empty_completion:"빈 답이 왔어요. 내용을 조금 더 구체적으로 적어 보세요."
+};
+aiBtn.onclick=async()=>{
+  const d=readForm();
+  if(!hasContent(d)){ setStatus("작업 순서나 업무 설명을 한 줄 이상 적어 주세요.","err"); return; }
+  if(!sample) return;
+  ctl=new AbortController();
+  aiBtn.disabled=true; $("#go-tpl").disabled=true; $("#stop").hidden=false;
+  showOut("","" ); out.textContent="생각하는 중…"; out.classList.add("empty");
+  setStatus("Claude가 프롬프트를 다듬고 있어요. 보통 10~40초 걸려요.");
+  try{
+    const {text,truncated}=await sample(META+workflowText(d)+'\n"""', {
+      signal:ctl.signal, cache:false,
+      onText:({text})=>{ out.classList.remove("empty"); out.textContent=text; }
+    });
+    showOut(text.trim(),"ai");
+    setStatus(truncated?"길어서 중간에 잘렸어요. 단계를 나눠서 다시 해 보세요.":"다 됐어요. 복사해서 바로 써 보세요.", truncated?"err":"ok");
+  }catch(e){
+    if(e.text) showOut(e.text,"ai"); else showOut("","");
+    if(e.code==="cancelled") setStatus("멈췄어요.");
+    else if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(e.code)){
+      setStatus(ERR[e.code]||"AI 다듬기를 쓸 수 없어요.","err");
+      disableAI("AI 다듬기를 쓸 수 없는 상태예요. '틀에 맞춰 바로 만들기'는 그대로 쓸 수 있어요.");
+    }
+    else setStatus(ERR[e.code]||"연결이 잠깐 끊겼어요. 다시 눌러 주세요.","err");
+  }finally{
+    aiBtn.disabled = aiOff;
+    $("#go-tpl").disabled=false; $("#stop").hidden=true; ctl=null;
+  }
+};
+$("#stop").onclick=()=>ctl?.abort();
+
+// ---------- 복사 ----------
+$("#copy").onclick=async()=>{
+  try{ await navigator.clipboard.writeText(out.textContent); setStatus("복사했어요.","ok"); }
+  catch(e){ const r=document.createRange(); r.selectNodeContents(out); const s=getSelection(); s.removeAllRanges(); s.addRange(r); setStatus("자동 복사가 막혀 있어요. 선택된 글을 길게 눌러 복사해 주세요.","err"); }
+};
+
+// ---------- 내 목록 ----------
+function getLib(){ try{return JSON.parse(localStorage.getItem("ps-lib")||"[]")}catch(e){return []} }
+function setLib(l){ try{localStorage.setItem("ps-lib",JSON.stringify(l))}catch(e){} }
+function renderLib(){
+  const box=$("#lib"); box.innerHTML=""; const l=getLib();
+  if(!l.length){ const p=document.createElement("p"); p.className="note"; p.textContent="아직 저장한 프롬프트가 없어요. 마음에 드는 결과가 나오면 '내 목록에 저장'을 눌러 두세요."; box.append(p); return; }
+  l.forEach((it,i)=>{
+    const row=document.createElement("div"); row.className="lib-item";
+    const t=document.createElement("span"); t.textContent=it.title;
+    const dt=document.createElement("small"); dt.textContent=it.date;
+    const open=document.createElement("button"); open.className="btn small"; open.textContent="열기";
+    open.onclick=()=>{ if(it.form) loadForm(it.form); showOut(it.prompt,it.kind); setStatus("저장한 프롬프트를 불러왔어요."); };
+    const del=document.createElement("button"); del.className="icon"; del.textContent="×"; del.title="지우기"; del.setAttribute("aria-label","지우기");
+    del.onclick=()=>{ const n=getLib(); n.splice(i,1); setLib(n); renderLib(); };
+    row.append(t,dt,open,del); box.append(row);
+  });
+}
+$("#save").onclick=()=>{
+  const d=readForm(); const l=getLib(); const now=new Date();
+  l.unshift({title:d.name||"이름 없는 업무", date:`${now.getMonth()+1}/${now.getDate()}`, prompt:out.textContent, kind:lastKind, form:{...d,steps:d.steps}});
+  setLib(l.slice(0,30)); renderLib(); setStatus("내 목록에 저장했어요.","ok");
+};
+
+// ---------- 시작 ----------
+(function init(){
+  let draft=null; try{draft=JSON.parse(localStorage.getItem("ps-draft")||"null")}catch(e){}
+  if(draft && (draft.name||draft.free||(draft.steps||[]).some(Boolean))) loadForm(draft);
+  else { loadForm(EXAMPLES["주간 보고"]); showOut(buildTemplate(readForm()),"tpl"); setStatus("예시예요. 내 업무로 바꿔서 적어 보세요."); }
+  renderLib();
+})();
+</script>
+
+</body></html>
