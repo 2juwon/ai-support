@@ -314,7 +314,11 @@ const AI_SERVER="https://ai-support.2juwon.workers.dev";
 let sample=null, ctl=null, aiOff=false, aiVia = window.claude ? "sample" : "server";
 const aiBtn=$("#go-ai");
 (async()=>{
-  if(aiVia!=="sample") return;
+  if(aiVia!=="sample"){
+    // 서버에 AI 열쇠가 없으면 버튼을 미리 꺼 둠 (연결이 안 되면 그대로 두고 누를 때 안내)
+    try{ const j=await (await fetch(AI_SERVER+"/",{cache:"no-store"})).json(); if(j && j.ai===false) disableAI("AI 다듬기는 준비 중이에요. '틀에 맞춰 바로 만들기'는 그대로 쓸 수 있어요."); }catch(e){}
+    return;
+  }
   $("#ai-note").textContent="'AI로 다듬기'는 이 페이지에서 Claude를 불러 쓰는 방식이라 따로 API 연동이 필요 없어요. 처음 누를 때 허용 여부를 한 번 물어요.";
   try{ sample = window.claude?.use ? await window.claude.use("sample") : null; }catch(e){ sample=null; }
   if(!sample) disableAI("이 화면에서는 AI 다듬기를 쓸 수 없어요. '틀에 맞춰 바로 만들기'는 그대로 쓸 수 있어요.");
