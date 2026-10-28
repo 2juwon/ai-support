@@ -81,10 +81,10 @@ export class Store extends DurableObject {
     return { id };
   }
 
-  async shareGet(id) {
+  async shareGet(id, count = true) {
     const r = this.sql.exec('SELECT data, at FROM shares WHERE id=?', id).toArray()[0];
     if (!r || Date.now() - r.at > SHARE_KEEP_MS) return null;
-    this.sql.exec('UPDATE shares SET views=views+1 WHERE id=?', id);
+    if (count) this.sql.exec('UPDATE shares SET views=views+1 WHERE id=?', id);
     return r.data;
   }
 

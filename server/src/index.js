@@ -13,6 +13,32 @@ const CORS = {
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS },
 });
+const PAGES = 'https://2juwon.github.io/ai-support/';
+// 링크 미리보기를 만드는 수집기 (카카오톡·슬랙·페이스북·디스코드·텔레그램·네이버 등)
+const SCRAPER = /kakaotalk-scrap|facebookexternalhit|facebot|slackbot|twitterbot|discordbot|telegrambot|linkedinbot|whatsapp|skypeuripreview|yeti|daum|googlebot|bingbot|applebot|iframely|embedly|pinterest|redditbot|line-poker|teams/i;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const short = (t, n) => { const a = Array.from(String(t || '').replace(/\s+/g, ' ').trim()); return a.length > n ? a.slice(0, n - 1).join('') + '…' : a.join(''); };
+// 공유한 프롬프트로 미리보기 카드 페이지를 만듦 (사람이 열면 스크립트로 공방 페이지로 넘어감)
+function cardHtml(id, data, self) {
+  let o = {}; try { o = JSON.parse(data); } catch (e) { /* 그대로 */ }
+  const f = o.f || {};
+  const name = short(f.name || (String(o.p || '').match(/["“]([^"”]{2,40})["”]\s*업무/) || [])[1] || '업무 프롬프트', 40);
+  const steps = Array.isArray(f.steps) ? f.steps.filter(Boolean) : [];
+  let desc = steps.length ? steps.slice(0, 3).map((t, i) => `${i + 1}. ${short(t, 26)}`).join('  ') + (steps.length > 3 ? `  외 ${steps.length - 3}단계` : '')
+    : short(f.free || String(o.p || '').replace(/[#*\[\]]/g, ''), 90);
+  if (f.output) desc += ' · 결과: ' + short(f.output, 30);
+  const title = `${name} — 업무 프롬프트`;
+  const to = PAGES + '?s=' + id;
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title><meta name="description" content="${esc(desc)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="업무 프롬프트 공방">
+<meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
+<meta property="og:url" content="${esc(self)}"><meta property="og:image" content="${PAGES}og.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image"><link rel="canonical" href="${esc(to)}">
+<script>location.replace(${JSON.stringify(to)})</script></head>
+<body style="font-family:system-ui,sans-serif;padding:24px"><p>${esc(title)}</p><p><a href="${esc(to)}">프롬프트 열어 보기</a></p></body></html>`;
+}
 const store = (env) => env.STORE.get(env.STORE.idFromName('main'));
 const ipOf = (req) => req.headers.get('CF-Connecting-IP') || 'local';
 
@@ -83,6 +109,19 @@ export default {
         await s.aiEnd(st.day, st.keys, { gotText: !!r.form, inTok: r.inTok, outTok: r.outTok });
         if (r.form) return json({ form: r.form, left: st.left });
         return json({ code: r.code, error: r.error }, r.code === 'unreadable' ? 422 : 502);
+      }
+
+      // 짧은 공유 링크: 수집기에게는 미리보기 카드, 사람에게는 공방 페이지로 바로 보냄
+      const sl = url.pathname.match(/^\/s\/([A-Za-z0-9]{7})$/);
+      if (sl && (request.method === 'GET' || request.method === 'HEAD')) {
+        const to = PAGES + '?s=' + sl[1];
+        const ua = request.headers.get('user-agent') || '';
+        if (!SCRAPER.test(ua)) return Response.redirect(to, 302);
+        const data = await store(env).shareGet(sl[1], false);
+        if (!data) return Response.redirect(to, 302);
+        return new Response(request.method === 'HEAD' ? null : cardHtml(sl[1], data, url.origin + url.pathname), {
+          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600' },
+        });
       }
 
       if (url.pathname === '/api/share' && request.method === 'POST') {
