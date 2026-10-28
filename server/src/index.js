@@ -1,7 +1,7 @@
 /* 업무 프롬프트 공방 — 익명 기록 서버 (Cloudflare Workers + Durable Object SQLite) */
 import { Store } from './store.js';
 import { ADMIN_HTML } from './admin.js';
-import { memoText, refine } from './refine.js';
+import { memoText, refine, extract } from './refine.js';
 export { Store };
 
 const CORS = {
@@ -68,6 +68,21 @@ export default {
           onEnd: (r) => s.aiEnd(st.day, st.keys, r),
           waitUntil: (p) => ctx.waitUntil(p),
         });
+      }
+
+      if (url.pathname === '/api/extract' && request.method === 'POST') {
+        if (!env.ANTHROPIC_API_KEY) return json({ code: 'no_key', error: '서버에 AI 열쇠가 아직 없어서 AI로 읽을 수 없어요.' }, 503);
+        let body;
+        try { body = await readJson(request, 60000); } catch (e) { return json({ code: 'bad', error: '보낸 내용을 읽지 못했어요' }, 400); }
+        const prompt = Array.from(String(body.prompt || '').trim()).slice(0, 12000).join('');
+        if (prompt.length < 10) return json({ code: 'empty', error: '옮길 프롬프트가 너무 짧아요.' }, 400);
+        const s = store(env);
+        const st = await s.aiStart(ipOf(request), String(body.sid || ''), adminOk(request, env));
+        if (st.error) return json(st, 429);
+        const r = await extract({ env, prompt });
+        await s.aiEnd(st.day, st.keys, { gotText: !!r.form, inTok: r.inTok, outTok: r.outTok });
+        if (r.form) return json({ form: r.form, left: st.left });
+        return json({ code: r.code, error: r.error }, r.code === 'unreadable' ? 422 : 502);
       }
 
       if (url.pathname === '/api/log' && request.method === 'POST') {

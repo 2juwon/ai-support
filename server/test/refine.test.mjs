@@ -16,7 +16,13 @@ if (process.argv.includes('--mock')) {
     req.on('end', () => {
       const b = JSON.parse(body);
       const memo = b.messages[0].content;
-      if (req.headers['x-api-key'] !== 'fake-key' || !b.stream || !b.system.includes('업무 프롬프트')) { res.writeHead(401); return res.end('{}'); }
+      if (req.headers['x-api-key'] !== 'fake-key') { res.writeHead(401); return res.end('{}'); }
+      if (!b.stream && b.system.includes('업무 흐름을 정리')) {      // 프롬프트 → 워크플로우
+        res.writeHead(200, { 'content-type': 'application/json' });
+        const text = memo.includes('못읽음') ? '죄송해요, 모르겠어요' : '설명입니다\n{"name":"견적 정리","steps":["견적을 모은다","표로 만든다"],"input":"견적 목록","output":"표","role":"분석가","tone":"간결","rules":["숫자 지어내지 않기","추정 표시"]}';
+        return res.end(JSON.stringify({ content: [{ type: 'text', text }], usage: { input_tokens: 500, output_tokens: 100 } }));
+      }
+      if (!b.stream || !b.system.includes('업무 프롬프트')) { res.writeHead(401); return res.end('{}'); }
       if (memo.includes('실패')) { res.writeHead(500); return res.end('{"type":"error"}'); }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const ev = (type, o) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...o })}\n\n`);
@@ -89,6 +95,18 @@ if (process.argv.includes('--mock')) {
   o = await read(await call({ sid: sid + 'l', form: form('긴 것', { steps: Array(35).fill('가'.repeat(520)) }) }, '10.1.0.7'));
   const len = +o.text.split('\n').pop();
   ok(len > 0 && len < 30 * 520 + 500, '긴 내용은 잘라서 보냄 (' + len + '자)');
+
+  // 7-1. 프롬프트 → 워크플로우
+  r = await fetch(BASE + '/api/extract', { method: 'POST', headers: { 'content-type': 'application/json', 'CF-Connecting-IP': '10.1.0.8' }, body: JSON.stringify({ sid: sid + 'x1', prompt: '견적을 모아서 표로 정리해 줘. 숫자는 지어내지 마.' }) });
+  let x = await r.json();
+  ok(r.status === 200 && x.form.steps.length === 2 && x.form.tone === '간결한 보고체 (~함, ~임)' && x.form.rules === '숫자 지어내지 않기, 추정 표시' && x.left === 2, 'AI로 프롬프트를 워크플로우로 읽음 (말투 맞춤·남은 횟수)');
+  r = await fetch(BASE + '/api/extract', { method: 'POST', headers: { 'content-type': 'application/json', 'CF-Connecting-IP': '10.1.0.8' }, body: JSON.stringify({ sid: sid + 'x1', prompt: '못읽음 이건 아무 순서도 없는 글이에요' }) });
+  x = await r.json();
+  ok(r.status === 422 && x.code === 'unreadable', '못 읽으면 422');
+  r = await fetch(BASE + '/api/extract', { method: 'POST', headers: { 'content-type': 'application/json', 'CF-Connecting-IP': '10.1.0.8' }, body: JSON.stringify({ sid: sid + 'x1', prompt: '견적 정리 두 번째 요청입니다' }) });
+  x = await r.json();
+  ok(r.status === 200 && x.left === 1, '못 읽은 건 횟수에서 뺌');
+  ok((await fetch(BASE + '/api/extract', { method: 'POST', headers: { 'content-type': 'application/json', 'CF-Connecting-IP': '10.1.0.9' }, body: '{"prompt":"짧음"}' })).status === 400, '너무 짧으면 거절');
 
   // 8. 관리 통계에 AI 사용량
   const st = await (await fetch(BASE + '/api/admin/stats', { headers: { 'x-admin-key': KEY } })).json();
