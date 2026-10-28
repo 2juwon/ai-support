@@ -186,7 +186,7 @@ details.imp textarea{background:var(--surface);font-family:var(--mono);font-size
         <button class="btn small" id="share-link">링크 복사</button>
         <button class="btn small" id="share-text">내용 복사</button>
         <button class="btn small" id="share-native" hidden>다른 앱으로 보내기…</button>
-        <p class="note" style="flex-basis:100%">링크에는 프롬프트와 작업 순서가 들어 있어요(서버에 저장하지 않아요). 받는 사람이 열면 그대로 채워져요.</p>
+        <p class="note" style="flex-basis:100%">링크를 받은 사람이 열면 이 프롬프트와 작업 순서가 그대로 채워져요. 짧은 링크를 만들려고 공유한 내용은 서버에 1년 보관돼요(링크를 아는 사람만 볼 수 있어요).</p>
       </div>
       <p class="note hint" id="tip">팁: 완성된 프롬프트의 <b>[[ ]]</b> 자리는 실제로 쓸 때 자료를 넣는 곳이에요.</p>
 
@@ -699,6 +699,14 @@ async function shareLink(){
   const d=readForm();
   const obj={v:1, p:out.textContent, k:lastKind, f:{mode:d.mode,name:d.name,steps:d.steps,free:d.free,input:d.input,output:d.output,role:d.role,tone:d.tone,rules:d.rules}};
   const base = inArtifact ? PAGES_URL : location.origin+location.pathname;
+  // 짧은 링크: 서버에 맡기고 7글자 번호만 주소에 (claude.ai 안에서는 서버 접속이 막혀 긴 링크로)
+  if(!inArtifact){
+    try{
+      const r=await fetch(AI_SERVER+"/api/share",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({data:obj})});
+      const j=await r.json();
+      if(r.ok && j.id) return base+"?s="+j.id;
+    }catch(e){}
+  }
   return base+"#p="+await packShare(obj);
 }
 function shareTitle(){ return (readForm().name||"업무 프롬프트")+" — 업무 프롬프트 공방"; }
@@ -731,16 +739,25 @@ if(navigator.share && !inArtifact){
 // 공유 링크로 들어왔을 때: 맨 처음 init보다 먼저 채움
 async function openShared(){
   const m=location.hash.match(/^#p=([A-Za-z0-9_-]+)$/);
-  if(!m) return false;
+  const sid=new URLSearchParams(location.search).get("s");
+  const short = sid && /^[A-Za-z0-9]{7}$/.test(sid);
+  if(!m && !short) return false;
   try{
-    const o=await unpackShare(m[1]);
+    let o;
+    if(m) o=await unpackShare(m[1]);
+    else{
+      const r=await fetch(AI_SERVER+"/api/share/"+sid);
+      if(r.status===404){ setStatus("없거나 보관 기간(1년)이 지난 공유 링크예요.","err"); return null; }
+      if(!r.ok) throw new Error("server");
+      o=await r.json();
+    }
     if(o.f) loadForm({...o.f, tone:pickTone(o.f.tone)||TONES[0]});
     showOut(String(o.p||""), o.k==="ai"?"ai":o.k==="tpl"?"tpl":"");
     setStatus("공유받은 프롬프트예요. 그대로 복사해 쓰거나, 왼쪽 작업 순서를 고쳐 내 것으로 다시 만들어 보세요.","ok");
     saveDraft();
     return true;
-  }catch(e){ setStatus("공유 링크가 잘려서 열지 못했어요. 보낸 사람에게 '내용 복사'로 다시 받아 주세요.","err"); return null; }
-  finally{ history.replaceState(null,"",location.pathname+location.search); }
+  }catch(e){ setStatus(m?"공유 링크가 잘려서 열지 못했어요. 보낸 사람에게 '내용 복사'로 다시 받아 주세요.":"공유 링크를 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.","err"); return null; }
+  finally{ const q=new URLSearchParams(location.search); q.delete("s"); history.replaceState(null,"",location.pathname+(q.toString()?"?"+q:"")); }
 }
 
 // ---------- 시작 ----------

@@ -85,6 +85,23 @@ export default {
         return json({ code: r.code, error: r.error }, r.code === 'unreadable' ? 422 : 502);
       }
 
+      if (url.pathname === '/api/share' && request.method === 'POST') {
+        let body;
+        try { body = await readJson(request, 120000); } catch (e) { return json({ error: '보낸 내용을 읽지 못했어요' }, 400); }
+        const d = body && body.data;
+        if (!d || typeof d !== 'object' || typeof d.p !== 'string' || !d.p.trim()) return json({ error: '공유할 프롬프트가 없어요' }, 400);
+        const data = JSON.stringify({ v: 1, p: d.p.slice(0, 30000), k: d.k === 'ai' || d.k === 'tpl' ? d.k : '', f: d.f && typeof d.f === 'object' ? d.f : null });
+        if (data.length > 60000) return json({ error: '너무 길어요' }, 400);
+        const r = await store(env).shareAdd(data, ipOf(request));
+        return json(r, r.error ? 429 : 200);
+      }
+      const ms = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{7})$/);
+      if (ms && request.method === 'GET') {
+        const data = await store(env).shareGet(ms[1]);
+        if (!data) return json({ error: '없거나 보관 기간이 지난 링크예요' }, 404);
+        return new Response(data, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS } });
+      }
+
       if (url.pathname === '/api/log' && request.method === 'POST') {
         let body;
         try { body = await readJson(request); } catch (e) { return json({ error: '보낸 내용을 읽지 못했어요' }, 400); }

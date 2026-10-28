@@ -6,7 +6,9 @@ const LIM = { name: 80, step: 300, steps: 20, free: 3000, output: 300, role: 100
 const PER_DAY = 200;        // 한 곳(IP)에서 하루에 남길 수 있는 기록 수
 const GAP_MS = 1500;        // 너무 빠른 연속 요청 막기
 const SAME_MS = 30 * 60e3;  // 같은 사람이 같은 내용을 30분 안에 다시 만들면 한 건으로 합침
-const KEEP = 50000;         // 이보다 많으면 오래된 것부터 지움
+const KEEP = 50000;
+const SHARE_PER_DAY = 100;               // 한 곳(IP)에서 하루에 만들 수 있는 공유 링크
+const SHARE_KEEP_MS = 365 * 86400e3;    // 공유 링크 보관 1년 (마지막으로 다시 공유한 때부터)         // 이보다 많으면 오래된 것부터 지움
 
 const cut = (s, n) => Array.from(mask(s).trim()).slice(0, n).join('');
 const KINDS = { tpl: 1, ai: 2 };
@@ -51,6 +53,39 @@ export class Store extends DurableObject {
     this.sql.exec('CREATE TABLE IF NOT EXISTS ai_limits(who TEXT PRIMARY KEY, day TEXT, n INTEGER, last INTEGER)');
     this.sql.exec(`CREATE TABLE IF NOT EXISTS ai_days(day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0,
       fails INTEGER NOT NULL DEFAULT 0, in_tok INTEGER NOT NULL DEFAULT 0, out_tok INTEGER NOT NULL DEFAULT 0)`);
+    // 짧은 공유 링크: 공유한 프롬프트·작업 순서를 1년 보관
+    this.sql.exec('CREATE TABLE IF NOT EXISTS shares(id TEXT PRIMARY KEY, at INTEGER NOT NULL, hash TEXT, data TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 0)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS shares_hash ON shares(hash)');
+  }
+
+  // 공유 맡기기. { id } 또는 { error }
+  async shareAdd(data, ip) {
+    const now = Date.now(), day = kstDay(now);
+    const who = 'sh:' + (await sha('ai-share:' + ip)).slice(0, 24);
+    const r = this.sql.exec('SELECT day, n, last FROM limits WHERE who=?', who).toArray()[0];
+    const n = r && r.day === day ? r.n : 0;
+    if (n >= SHARE_PER_DAY) return { error: '오늘은 공유 링크를 더 만들 수 없어요' };
+    const hash = (await sha(data)).slice(0, 32);
+    const old = this.sql.exec('SELECT id FROM shares WHERE hash=? LIMIT 1', hash).toArray()[0];
+    if (old) { this.sql.exec('UPDATE shares SET at=? WHERE id=?', now, old.id); return { id: old.id }; }
+    this.sql.exec('INSERT OR REPLACE INTO limits(who, day, n, last) VALUES(?,?,?,?)', who, day, n + 1, now);
+    const ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';   // 헷갈리는 0·O·1·l·I 뺌
+    let id = '';
+    for (let tries = 0; tries < 5; tries++) {
+      const b = crypto.getRandomValues(new Uint8Array(7));
+      id = Array.from(b, (x) => ABC[x % ABC.length]).join('');
+      if (!this.sql.exec('SELECT 1 FROM shares WHERE id=?', id).toArray().length) break;
+    }
+    this.sql.exec('INSERT INTO shares(id, at, hash, data) VALUES(?,?,?,?)', id, now, hash, data);
+    this.sql.exec('DELETE FROM shares WHERE at<?', now - SHARE_KEEP_MS);
+    return { id };
+  }
+
+  async shareGet(id) {
+    const r = this.sql.exec('SELECT data, at FROM shares WHERE id=?', id).toArray()[0];
+    if (!r || Date.now() - r.at > SHARE_KEEP_MS) return null;
+    this.sql.exec('UPDATE shares SET views=views+1 WHERE id=?', id);
+    return r.data;
   }
 
   aiConf() {
@@ -193,7 +228,8 @@ export class Store extends DurableObject {
       }
     }
     const words = [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 40).map(([k, n]) => ({ k, n }));
-    return { total: t, days, tones, roles, outputs, words, examples, ai: this.aiStats() };
+    const shares = this.sql.exec('SELECT COUNT(*) AS n, COALESCE(SUM(views),0) AS views FROM shares').one();
+    return { total: t, days, tones, roles, outputs, words, examples, ai: this.aiStats(), shares };
   }
 
   async exportRows() { return this.rows('', [], 100000, 0); }

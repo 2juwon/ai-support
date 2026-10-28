@@ -19,7 +19,7 @@
 - 옮긴 뒤 **옮기기 전으로 되돌리기**로 원래 내용을 되살릴 수 있습니다.
 
 ## 공유하기
-- **링크 복사**: 프롬프트와 작업 순서를 압축해 주소 `#p=` 뒤에 넣습니다. 서버에 아무것도 저장하지 않고, 받는 사람이 열면 그대로 채워집니다. claude.ai 안에서 만든 링크도 이 GitHub Pages 주소로 만들어집니다.
+- **링크 복사**: 짧은 링크(`https://2juwon.github.io/ai-support/?s=7글자`)를 만듭니다. 공유한 프롬프트와 작업 순서는 서버에 1년 보관되고(같은 내용은 같은 번호), 받는 사람이 열면 그대로 채워집니다. 서버에 닿지 못하면(claude.ai 안 등) 내용을 주소 `#p=` 뒤에 압축해 넣은 긴 링크로 대신합니다.
 - **내용 복사**: 업무 이름과 쓰는 법 한 줄을 붙여 글로 복사합니다.
 - **다른 앱으로 보내기**: 휴대폰 등 공유 창이 있는 브라우저에서만 보입니다.
 
@@ -47,6 +47,7 @@
 Cloudflare Workers + Durable Object(SQLite, 무료 플랜). 주소 `https://ai-support.2juwon.workers.dev`
 
 - `POST /api/log` 기록 남기기, `POST /api/log/:id/copy|save` 복사·저장 표시
+- `POST /api/share` 짧은 공유 링크 만들기 (`{id}`), `GET /api/share/:id` 열기
 - `POST /api/extract` 제목 없는 프롬프트를 워크플로우로 읽기 (`{form, left}`)
 - `POST /api/refine` AI로 다듬기 (한 줄에 JSON 하나씩 흘려보냄: `{left}` → `{t}`… → `{done, truncated}` 또는 `{error}`)
 - 관리 페이지 `/admin` (비밀번호 `ADMIN_KEY`): AI 다듬기 오늘·누적 횟수와 예상 비용, 요약 숫자, 날짜별 기록, 자주 나오는 낱말, 결과·역할·말투 순위, 기록 찾기·지우기, 엑셀용 CSV 받기
