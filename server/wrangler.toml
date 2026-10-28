@@ -3,6 +3,15 @@ main = "src/index.js"
 compatibility_date = "2025-10-01"
 workers_dev = true
 
+# AI로 다듬기 (POST /api/refine) — 열쇠 ANTHROPIC_API_KEY는 비밀값으로 따로 넣음
+[vars]
+AI_MODEL = "claude-haiku-5-5"
+AI_DAILY = "300"        # 하루에 모두 합쳐 쓸 수 있는 횟수
+AI_PER_PERSON = "20"    # 한 사람(IP·브라우저)이 하루에 쓸 수 있는 횟수
+AI_MAX_TOKENS = "3000"
+PRICE_IN = "0.10"       # 예상 비용 계산용, 백만 토큰당 달러
+PRICE_OUT = "0.50"
+
 [observability]
 enabled = true
 

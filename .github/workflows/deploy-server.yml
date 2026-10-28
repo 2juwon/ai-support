@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_ADMIN_KEY: ${{ secrets.ADMIN_KEY != '' }}
+      HAS_AI_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -58,3 +59,17 @@ jobs:
       - name: 비밀번호 안내
         if: env.HAS_ADMIN_KEY != 'true'
         run: echo "::warning::관리 페이지를 보려면 저장소 Secrets에 ADMIN_KEY(관리자 비밀번호)를 넣고 이 작업을 다시 실행해 주세요"
+
+      - name: AI 열쇠 넣기
+        if: env.HAS_AI_KEY == 'true'
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: printf '%s' "$ANTHROPIC_API_KEY" | npx wrangler secret put ANTHROPIC_API_KEY
+
+      - name: AI 열쇠 안내
+        if: env.HAS_AI_KEY != 'true'
+        run: echo "::warning::'AI로 다듬기'를 켜려면 저장소 Secrets에 ANTHROPIC_API_KEY(Claude API 키)를 넣고 이 작업을 다시 실행해 주세요"

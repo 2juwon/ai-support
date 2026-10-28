@@ -47,6 +47,65 @@ export class Store extends DurableObject {
     this.sql.exec('CREATE INDEX IF NOT EXISTS logs_at ON logs(at)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS logs_sid ON logs(sid, hash)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS limits(who TEXT PRIMARY KEY, day TEXT, n INTEGER, last INTEGER)');
+    // AI로 다듬기: 사람(IP·브라우저)별 하루 횟수, 날짜별 호출·토큰 수 (내용은 남기지 않음)
+    this.sql.exec('CREATE TABLE IF NOT EXISTS ai_limits(who TEXT PRIMARY KEY, day TEXT, n INTEGER, last INTEGER)');
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS ai_days(day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0,
+      fails INTEGER NOT NULL DEFAULT 0, in_tok INTEGER NOT NULL DEFAULT 0, out_tok INTEGER NOT NULL DEFAULT 0)`);
+  }
+
+  aiConf() {
+    const n = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
+    return { daily: n(this.env.AI_DAILY, 300), perPerson: n(this.env.AI_PER_PERSON, 20), gap: n(this.env.AI_GAP_MS, 5000) };
+  }
+
+  // AI 다듬기 한 번 쓰기 전 확인 + 미리 한 번 셈. { ok, left, keys, day } 또는 { error, code }
+  async aiStart(ip, sid, owner) {
+    const now = Date.now(), day = kstDay(now), c = this.aiConf();
+    const keys = [(await sha('ai-ip:' + ip)).slice(0, 24)];
+    if (/^[a-z0-9]{8,40}$/.test(sid || '')) keys.push('s:' + sid);
+    const used = this.sql.exec('SELECT calls FROM ai_days WHERE day=?', day).toArray()[0]?.calls || 0;
+    let mine = 0;
+    if (!owner) {
+      if (used >= c.daily) return { code: 'daily', error: `오늘 모두가 쓸 수 있는 AI 다듬기 ${c.daily}번을 다 썼어요. 내일 다시 써 주세요. '틀에 맞춰 바로 만들기'는 그대로 쓸 수 있어요.` };
+      for (const who of keys) {
+        const r = this.sql.exec('SELECT day, n, last FROM ai_limits WHERE who=?', who).toArray()[0];
+        if (!r || r.day !== day) continue;
+        if (now - r.last < c.gap) return { code: 'gap', error: '조금만 있다가 다시 눌러 주세요.' };
+        mine = Math.max(mine, r.n);
+      }
+      if (mine >= c.perPerson) return { code: 'person', error: `AI 다듬기는 하루 ${c.perPerson}번까지예요. 내일 다시 써 주세요.` };
+    }
+    for (const who of keys) {
+      const r = this.sql.exec('SELECT day, n FROM ai_limits WHERE who=?', who).toArray()[0];
+      this.sql.exec('INSERT OR REPLACE INTO ai_limits(who, day, n, last) VALUES(?,?,?,?)', who, day, (r && r.day === day ? r.n : 0) + 1, now);
+    }
+    this.sql.exec('INSERT INTO ai_days(day, calls) VALUES(?,1) ON CONFLICT(day) DO UPDATE SET calls=calls+1', day);
+    return { ok: true, day, keys, left: owner ? null : Math.max(0, Math.min(c.perPerson - mine - 1, c.daily - used - 1)) };
+  }
+
+  // 끝난 뒤 토큰 수 기록. 글이 하나도 안 나온 실패는 횟수에서 뺌
+  async aiEnd(day, keys, { gotText, inTok, outTok }) {
+    this.sql.exec('UPDATE ai_days SET in_tok=in_tok+?, out_tok=out_tok+? WHERE day=?', inTok | 0, outTok | 0, day);
+    if (!gotText) {
+      this.sql.exec('UPDATE ai_days SET calls=MAX(0,calls-1), fails=fails+1 WHERE day=?', day);
+      for (const who of keys) this.sql.exec('UPDATE ai_limits SET n=MAX(0,n-1), last=0 WHERE who=? AND day=?', who, day);
+    }
+    // 오래된 사람별 제한 정리
+    this.sql.exec('DELETE FROM ai_limits WHERE day<?', kstDay(Date.now() - 3 * 86400e3));
+  }
+
+  aiStats() {
+    const c = this.aiConf(), today = kstDay(Date.now());
+    const pin = +this.env.PRICE_IN || 0.10, pout = +this.env.PRICE_OUT || 0.50;   // 백만 토큰당 달러
+    const days = this.sql.exec('SELECT * FROM ai_days ORDER BY day DESC LIMIT 30').toArray().reverse();
+    const all = this.sql.exec('SELECT SUM(calls) AS calls, SUM(fails) AS fails, SUM(in_tok) AS in_tok, SUM(out_tok) AS out_tok FROM ai_days').one();
+    const cost = (r) => ((r.in_tok || 0) * pin + (r.out_tok || 0) * pout) / 1e6;
+    const t = days.find((d) => d.day === today) || { calls: 0, fails: 0, in_tok: 0, out_tok: 0 };
+    return {
+      model: this.env.AI_MODEL || 'claude-haiku-5-5', hasKey: !!this.env.ANTHROPIC_API_KEY, daily: c.daily, perPerson: c.perPerson,
+      today: { ...t, cost: cost(t) }, total: { calls: all.calls || 0, fails: all.fails || 0, cost: cost(all) },
+      days: days.map((d) => ({ day: d.day, calls: d.calls, cost: cost(d) })),
+    };
   }
 
   async allow(ip, now) {
@@ -134,7 +193,7 @@ export class Store extends DurableObject {
       }
     }
     const words = [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 40).map(([k, n]) => ({ k, n }));
-    return { total: t, days, tones, roles, outputs, words, examples };
+    return { total: t, days, tones, roles, outputs, words, examples, ai: this.aiStats() };
   }
 
   async exportRows() { return this.rows('', [], 100000, 0); }

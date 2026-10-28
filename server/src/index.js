@@ -1,6 +1,7 @@
 /* 업무 프롬프트 공방 — 익명 기록 서버 (Cloudflare Workers + Durable Object SQLite) */
 import { Store } from './store.js';
 import { ADMIN_HTML } from './admin.js';
+import { memoText, refine } from './refine.js';
 export { Store };
 
 const CORS = {
@@ -47,11 +48,27 @@ function toCsv(rows) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     try {
-      if (url.pathname === '/' ) return json({ ok: true, name: 'ai-support', admin: '/admin' });
+      if (url.pathname === '/') return json({ ok: true, name: 'ai-support', admin: '/admin', ai: !!env.ANTHROPIC_API_KEY });
+
+      if (url.pathname === '/api/refine' && request.method === 'POST') {
+        if (!env.ANTHROPIC_API_KEY) return json({ code: 'no_key', error: '서버에 AI 열쇠가 아직 없어서 AI 다듬기를 쓸 수 없어요.' }, 503);
+        let body;
+        try { body = await readJson(request, 60000); } catch (e) { return json({ code: 'bad', error: '보낸 내용을 읽지 못했어요' }, 400); }
+        const memo = memoText(body.form);
+        if (!memo) return json({ code: 'empty', error: '작업 순서나 업무 설명을 한 줄 이상 적어 주세요.' }, 400);
+        const s = store(env);
+        const st = await s.aiStart(ipOf(request), String(body.sid || ''), adminOk(request, env));
+        if (st.error) return json(st, 429);
+        return refine({
+          env, memo, left: st.left, headers: CORS,
+          onEnd: (r) => s.aiEnd(st.day, st.keys, r),
+          waitUntil: (p) => ctx.waitUntil(p),
+        });
+      }
 
       if (url.pathname === '/api/log' && request.method === 'POST') {
         let body;

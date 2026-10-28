@@ -12,8 +12,15 @@
 
 예시 3개(주간 보고 / 고객 문의 답변 / 회의록)를 눌러 보면 어떻게 나오는지 바로 볼 수 있습니다.
 
+## AI로 다듬기
+- **GitHub Pages 버전**: 서버(`/api/refine`)가 Claude API(`claude-haiku-5-5`)를 대신 불러 줍니다. 글이 나오는 대로 화면에 보이고, '멈추기'로 끊을 수 있습니다.
+  - 적은 내용('AI에게 줄 자료' 칸 포함)은 Claude로 보내기만 하고 서버에 남기지 않습니다. 횟수와 토큰 수만 셉니다.
+  - 제한: 모두 합쳐 하루 300번, 한 사람(IP·브라우저) 하루 20번, 5초 간격. Claude 쪽 실패로 글이 하나도 안 나온 건 횟수에서 뺍니다. 숫자는 `server/wrangler.toml`의 `[vars]`에서 바꿉니다.
+  - 주인 시험: `?dev=관리자비밀번호`로 한 번 열면 그 기기는 제한에서 빠집니다. `?dev=off`로 해제.
+  - 프롬프트(규칙)는 서버 `server/src/refine.js`의 `META`가 씁니다. 페이지 안 `META`는 claude.ai용이라 둘을 같이 고칩니다.
+- **claude.ai 아티팩트 버전**: 보는 사람 본인의 Claude 사용량으로 부릅니다(처음 누를 때 허용을 물음).
+
 ## 참고
-- 'AI로 다듬기' 버튼은 claude.ai 아티팩트 안에서만 동작합니다. 이 GitHub Pages 버전에서는 꺼지고 '틀에 맞춰 바로 만들기'만 쓸 수 있습니다.
 - 저장한 프롬프트와 작성 중인 내용은 각자 브라우저(localStorage)에만 남고, 서버로 보내지 않습니다.
 - HTML 파일 한 개로 되어 있어 따로 빌드가 필요 없습니다.
 
@@ -29,6 +36,8 @@
 Cloudflare Workers + Durable Object(SQLite, 무료 플랜). 주소 `https://ai-support.2juwon.workers.dev`
 
 - `POST /api/log` 기록 남기기, `POST /api/log/:id/copy|save` 복사·저장 표시
-- 관리 페이지 `/admin` (비밀번호 `ADMIN_KEY`): 요약 숫자, 날짜별 기록, 자주 나오는 낱말, 결과·역할·말투 순위, 기록 찾기·지우기, 엑셀용 CSV 받기
-- `main`에 `server/`가 바뀌면 GitHub Actions '서버 배포'가 자동으로 올립니다. 저장소 Secrets에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ADMIN_KEY`가 필요합니다
+- `POST /api/refine` AI로 다듬기 (한 줄에 JSON 하나씩 흘려보냄: `{left}` → `{t}`… → `{done, truncated}` 또는 `{error}`)
+- 관리 페이지 `/admin` (비밀번호 `ADMIN_KEY`): AI 다듬기 오늘·누적 횟수와 예상 비용, 요약 숫자, 날짜별 기록, 자주 나오는 낱말, 결과·역할·말투 순위, 기록 찾기·지우기, 엑셀용 CSV 받기
+- `main`에 `server/`가 바뀌면 GitHub Actions '서버 배포'가 자동으로 올립니다. 저장소 Secrets에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`(Claude API 키)가 필요합니다
 - 시험: `cd server && npx wrangler dev --var ADMIN_KEY:test-key-123` 를 켜 두고 `node test/api.test.mjs`
+- AI 시험(진짜 Claude 대신 가짜 서버): `test/refine.test.mjs` 맨 위 설명대로

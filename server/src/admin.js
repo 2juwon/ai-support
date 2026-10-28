@@ -37,6 +37,7 @@ button:hover{border-color:var(--accent)}button.primary{background:var(--accent);
 <div id="box" hidden>
 <div class="row"><button id="reload">새로고침</button><button id="csv">엑셀용 CSV 받기</button><span class="meta" id="when" style="margin-left:auto"></span></div>
 <div class="kpis" id="kpis"></div>
+<div class="card"><h2>AI로 다듬기 <span class="meta" id="aimeta"></span></h2><div class="kpis" id="aikpis"></div><p class="meta err" id="aiwarn" hidden></p></div>
 <div class="card"><h2>날짜별 기록 (최근 30일)</h2><div class="bars" id="bars"></div><div class="axis" id="axis"></div></div>
 <div class="card"><h2>자주 나오는 낱말 <span class="meta">업무 이름·작업 순서·설명</span></h2><div class="chips" id="words"></div></div>
 <div class="grid2"><div class="card"><h2>받고 싶은 결과</h2><ul class="hl" id="outputs"></ul></div><div class="card"><h2>AI 역할</h2><ul class="hl" id="roles"></ul></div><div class="card"><h2>말투</h2><ul class="hl" id="tones"></ul></div></div>
@@ -53,6 +54,9 @@ const fmt=t=>new Date(t).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'nu
 async function load(){try{const s=await(await api('/api/admin/stats')).json();try{localStorage.setItem('ps-admin',key)}catch(e){}$('#login').hidden=true;$('#box').hidden=false;draw(s);offset=0;$('#list').innerHTML='';await loadList()}catch(e){$('#msg').textContent=e.message;$('#login').hidden=false;$('#box').hidden=true}}
 function draw(s){const t=s.total;$('#when').textContent=new Date().toLocaleTimeString('ko-KR')+' 기준';
 const K=$('#kpis');K.innerHTML='';[[t.n||0,'만든 프롬프트'],[t.people||0,'만든 사람(브라우저)'],[pct(t.copied,t.n),'복사까지 함'],[pct(t.saved,t.n),'내 목록에 저장'],[(t.ai||0)+' / '+(t.tpl||0),'AI 다듬기 / 틀'],[t.avg_steps?(+t.avg_steps).toFixed(1):'-','평균 단계 수'],[s.examples,'예시 그대로 (제외)']].forEach(([v,l])=>{const d=el('div','kpi');d.append(el('b','',String(v)),el('span','',l));K.append(d)});
+const a=s.ai||{};const usd=v=>'$'+(+v||0).toFixed(v<1?3:2);$('#aimeta').textContent=(a.model||'')+' · 하루 '+(a.daily||'-')+'번, 한 사람 '+(a.perPerson||'-')+'번';
+const AK=$('#aikpis');AK.innerHTML='';[[(a.today?.calls||0)+' / '+(a.daily||'-'),'오늘 쓴 횟수'],[usd(a.today?.cost),'오늘 예상 비용'],[a.total?.calls||0,'모두 쓴 횟수'],[usd(a.total?.cost),'모두 예상 비용'],[a.total?.fails||0,'실패 (횟수에서 뺌)']].forEach(([v,l])=>{const d=el('div','kpi');d.append(el('b','',String(v)),el('span','',l));AK.append(d)});
+$('#aiwarn').hidden=!!a.hasKey;$('#aiwarn').textContent='서버에 ANTHROPIC_API_KEY가 없어서 AI 다듬기가 꺼져 있어요. 저장소 Secrets에 넣고 서버 배포를 다시 실행해 주세요.';
 const B=$('#bars');B.innerHTML='';const max=Math.max(1,...s.days.map(d=>d.n));s.days.forEach(d=>{const b=el('div');b.style.height=(d.n/max*100)+'%';b.dataset.t=d.day.slice(5)+' · '+d.n+'건 · '+d.people+'명';B.append(b)});
 $('#axis').innerHTML='';if(s.days.length){$('#axis').append(el('span','',s.days[0].day.slice(5)),el('span','',s.days[s.days.length-1].day.slice(5)))}else B.append(el('p','empty','아직 기록이 없어요'));
 const W=$('#words');W.innerHTML='';if(!s.words.length)W.append(el('span','empty','아직 없어요'));s.words.forEach(w=>{const c=el('span','chip',w.k);c.append(el('small','',w.n));W.append(c)});
